@@ -771,7 +771,10 @@ function stopPolling() {
 async function checkHealth() {
   if (!cfg.endpoint) return;
   try {
-    const res = await fetch(cfg.endpoint + '/health');
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(cfg.endpoint + '/health', { signal: controller.signal });
+    clearTimeout(timeout);
     if (res.ok) {
       stopPolling();
       setStatus('online', 'online');
@@ -780,7 +783,7 @@ async function checkHealth() {
       $btnStart.disabled = true;
       sysMsg('Gandalf is ready.');
     }
-  } catch(e) { sysMsg('Poll error: ' + e.message); }
+  } catch { /* still starting */ }
 }
 
 function setStatus(cls, label) {

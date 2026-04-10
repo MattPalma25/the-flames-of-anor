@@ -771,7 +771,10 @@ function stopPolling() {
 async function checkHealth() {
   if (!cfg.endpoint) return;
   try {
-    const res = await fetch(cfg.endpoint + '/health', { signal: AbortSignal.timeout(4000) });
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(cfg.endpoint + '/health', { signal: controller.signal });
+clearTimeout(timeout);
     if (res.ok) {
       stopPolling();
       setStatus('online', 'online');

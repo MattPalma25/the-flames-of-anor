@@ -769,12 +769,14 @@ function stopPolling() {
 }
 
 async function checkHealth() {
-  if (!cfg.endpoint) return;
+  if (!cfg.endpoint) { sysMsg('No endpoint configured'); return; }
+  sysMsg('Polling: ' + cfg.endpoint);
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 4000);
     const res = await fetch(cfg.endpoint + '/health', { signal: controller.signal });
     clearTimeout(timeout);
+    sysMsg('Response status: ' + res.status);
     if (res.ok) {
       stopPolling();
       setStatus('online', 'online');
@@ -783,7 +785,7 @@ async function checkHealth() {
       $btnStart.disabled = true;
       sysMsg('Gandalf is ready.');
     }
-  } catch { /* still starting */ }
+  } catch(e) { sysMsg('Poll error: ' + e.message); }
 }
 
 function setStatus(cls, label) {

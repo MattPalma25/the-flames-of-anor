@@ -867,6 +867,7 @@ $btnStop.onclick   = stopPod;
 
 // ── Init ──────────────────────────────────────────────────────────────────────
 (function init() {
+  sysMsg('Init running. Endpoint: ' + (cfg.endpoint || 'none'));
   if (!convs.length) newConv();
   else { renderTabs(); renderMessages(); }
 

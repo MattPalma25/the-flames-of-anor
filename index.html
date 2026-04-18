@@ -107,7 +107,7 @@
     color: var(--text-hi);
     font-family: 'JetBrains Mono', monospace;
     font-size: 11px;
-    padding: 7px 10px 7px 28px;
+    padding: 7px 10px 7px 10px;
     outline: none;
     transition: border-color 0.2s;
     letter-spacing: 0.05em;
@@ -396,25 +396,67 @@
 
   .msg-action-btn {
     background: none;
-    border: none;
+    border: 1px solid transparent;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 11px;
+    font-size: 14px;
     padding: 2px 5px;
-    transition: color 0.15s;
-    font-family: 'JetBrains Mono', monospace;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    font-size: 9px;
-    border: 1px solid transparent;
+    transition: all 0.15s;
+    line-height: 1;
+    border-radius: 3px;
   }
   .msg-action-btn:hover {
     color: var(--text-hi);
     border-color: var(--border);
+    background: rgba(255,255,255,0.04);
   }
   .msg-action-btn.copied {
     color: var(--green);
     border-color: var(--green);
+  }
+
+  /* Inline edit textarea for message editing */
+  .message-edit-area {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border-hi);
+    color: var(--text-hi);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 8px 10px;
+    resize: none;
+    line-height: 1.6;
+    outline: none;
+    margin-top: 4px;
+  }
+  .message-edit-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 8px;
+  }
+  .message-edit-btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    padding: 5px 10px;
+    border: 1px solid var(--border-hi);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .message-edit-btn.confirm {
+    border-color: var(--accent-dim);
+    color: var(--accent);
+  }
+  .message-edit-btn.confirm:hover {
+    background: rgba(193,127,58,0.08);
+    border-color: var(--accent);
+  }
+  .message-edit-btn.cancel:hover {
+    border-color: var(--border-hi);
+    color: var(--text-hi);
   }
 
   .message-body {
@@ -656,7 +698,6 @@
   <div class="sidebar-header">
     <div class="sidebar-title">Conversations</div>
     <div class="sidebar-search">
-      <span class="sidebar-search-icon">⌕</span>
       <input type="text" id="sidebar-search" placeholder="Search chats…">
     </div>
     <button class="sidebar-new-btn" id="btn-new-conv">+ New Conversation</button>
@@ -966,24 +1007,36 @@ function appendMessage(role, content, opts = {}) {
   const actions = document.createElement('div');
   actions.className = 'message-actions';
 
-  // Copy button
+  // Copy button — all messages
   const copyBtn = document.createElement('button');
   copyBtn.className = 'msg-action-btn';
-  copyBtn.textContent = 'copy';
+  copyBtn.textContent = '📋';
+  copyBtn.title = 'Copy';
   copyBtn.onclick = () => {
     navigator.clipboard.writeText(content).then(() => {
-      copyBtn.textContent = 'copied';
+      copyBtn.textContent = '✅';
       copyBtn.classList.add('copied');
-      setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('copied'); }, 1500);
+      setTimeout(() => { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 1500);
     });
   };
   actions.appendChild(copyBtn);
 
-  // Regenerate button (gandalf only, last turn only)
-  if (role === 'gandalf' && opts.isLast) {
+  // Edit button — user messages only
+  if (role === 'user') {
+    const editBtn = document.createElement('button');
+    editBtn.className = 'msg-action-btn';
+    editBtn.textContent = '✏️';
+    editBtn.title = 'Edit';
+    editBtn.onclick = () => startEdit(el, content, opts.turnIndex);
+    actions.appendChild(editBtn);
+  }
+
+  // Regenerate button — gandalf messages only
+  if (role === 'gandalf') {
     const regenBtn = document.createElement('button');
     regenBtn.className = 'msg-action-btn';
-    regenBtn.textContent = 'regen';
+    regenBtn.textContent = '🔄';
+    regenBtn.title = 'Regenerate';
     regenBtn.onclick = () => regenerate(opts.turnIndex);
     actions.appendChild(regenBtn);
   }
@@ -1002,15 +1055,105 @@ function appendMessage(role, content, opts = {}) {
   return el;
 }
 
+function startEdit(msgEl, originalContent, turnIndex) {
+  const body = msgEl.querySelector('.message-body');
+  const actions = msgEl.querySelector('.message-actions');
+  actions.style.opacity = '0';
+  actions.style.pointerEvents = 'none';
+
+  body.innerHTML = '';
+
+  const textarea = document.createElement('textarea');
+  textarea.className = 'message-edit-area';
+  textarea.value = originalContent;
+  textarea.rows = Math.min(originalContent.split('\n').length + 1, 8);
+
+  const editActions = document.createElement('div');
+  editActions.className = 'message-edit-actions';
+
+  const confirmBtn = document.createElement('button');
+  confirmBtn.className = 'message-edit-btn confirm';
+  confirmBtn.textContent = 'Send';
+
+  const cancelBtn = document.createElement('button');
+  cancelBtn.className = 'message-edit-btn cancel';
+  cancelBtn.textContent = 'Cancel';
+
+  cancelBtn.onclick = () => {
+    body.innerHTML = marked.parse(originalContent);
+    editActions.remove();
+    actions.style.opacity = '';
+    actions.style.pointerEvents = '';
+  };
+
+  confirmBtn.onclick = () => {
+    const newText = textarea.value.trim();
+    if (!newText || newText === originalContent) {
+      cancelBtn.onclick();
+      return;
+    }
+    submitEdit(turnIndex, newText);
+  };
+
+  textarea.addEventListener('keydown', e => {
+    if (e.key === 'Escape') cancelBtn.onclick();
+  });
+
+  editActions.appendChild(confirmBtn);
+  editActions.appendChild(cancelBtn);
+  body.appendChild(textarea);
+  body.appendChild(editActions);
+  textarea.focus();
+  textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+}
+
+async function submitEdit(turnIndex, newText) {
+  const conv = getActiveConv();
+  if (!conv) return;
+
+  // Truncate history from this turn onward, replace user message
+  conv.history = conv.history.slice(0, turnIndex);
+  conv.history.push({ user: newText, assistant: null });
+  saveConvs();
+
+  renderMessages();
+  showThinking();
+  setInputEnabled(false);
+
+  try {
+    const res = await fetch(cfg.endpoint + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: newText,
+        history: conv.history.slice(0, -1).map(t => ({ user: t.user, assistant: t.assistant }))
+      })
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    conv.history[conv.history.length - 1].assistant = data.response;
+    saveConvs();
+    removeThinking();
+    renderMessages();
+  } catch (err) {
+    conv.history.pop();
+    saveConvs();
+    removeThinking();
+    sysMsg('Edit failed: ' + err.message);
+  }
+
+  setInputEnabled(true);
+}
+
 async function regenerate(turnIndex) {
   const conv = getActiveConv();
   if (!conv) return;
 
-  // Remove the assistant response from this turn
+  // Truncate everything after this turn, clear this assistant response
+  conv.history = conv.history.slice(0, turnIndex + 1);
   conv.history[turnIndex].assistant = null;
   saveConvs();
 
-  // Re-render up to this point
   renderMessages();
   showThinking();
   setInputEnabled(false);

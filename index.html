@@ -958,7 +958,7 @@ function switchConv(id) {
   renderMessages();
 }
 
-// Auto-name from first user message
+// Auto-name fallback — grabs first few words immediately on send
 function maybeAutoName(conv) {
   if (conv.label !== 'New conversation') return;
   if (!conv.history.length) return;
@@ -967,6 +967,36 @@ function maybeAutoName(conv) {
   if (words) conv.label = words.length > 40 ? words.slice(0, 40) + '…' : words;
   saveConvs();
   renderSidebar($searchInput.value);
+}
+
+// AI-powered naming — fires async after first reply, silently updates sidebar
+async function aiAutoName(conv) {
+  if (!cfg.endpoint) return;
+  if (conv.history.length !== 1) return;
+  const userMsg = conv.history[0].user || '';
+  const assistantMsg = conv.history[0].assistant || '';
+  if (!userMsg || !assistantMsg) return;
+  try {
+    const res = await fetch(cfg.endpoint + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: 'Generate a short 4-6 word title for this conversation. Reply with ONLY the title, no punctuation, no quotes, nothing else.
+
+User: ' + userMsg + '
+Assistant: ' + assistantMsg,
+        history: []
+      })
+    });
+    if (!res.ok) return;
+    const data = await res.json();
+    const title = (data.response || '').trim().replace(/^["']|["']$/g, '').slice(0, 50);
+    if (title && title.length > 3) {
+      conv.label = title;
+      saveConvs();
+      renderSidebar($searchInput.value);
+    }
+  } catch(e) { /* silent fail, word-grab name stays */ }
 }
 
 document.getElementById('btn-new-conv').onclick = () => {
@@ -1010,13 +1040,13 @@ function appendMessage(role, content, opts = {}) {
   // Copy button — all messages
   const copyBtn = document.createElement('button');
   copyBtn.className = 'msg-action-btn';
-  copyBtn.textContent = '📋';
+  copyBtn.textContent = '⎘';
   copyBtn.title = 'Copy';
   copyBtn.onclick = () => {
     navigator.clipboard.writeText(content).then(() => {
-      copyBtn.textContent = '✅';
+      copyBtn.textContent = '✓';
       copyBtn.classList.add('copied');
-      setTimeout(() => { copyBtn.textContent = '📋'; copyBtn.classList.remove('copied'); }, 1500);
+      setTimeout(() => { copyBtn.textContent = '⎘'; copyBtn.classList.remove('copied'); }, 1500);
     });
   };
   actions.appendChild(copyBtn);
@@ -1025,7 +1055,7 @@ function appendMessage(role, content, opts = {}) {
   if (role === 'user') {
     const editBtn = document.createElement('button');
     editBtn.className = 'msg-action-btn';
-    editBtn.textContent = '✏️';
+    editBtn.textContent = '✎';
     editBtn.title = 'Edit';
     editBtn.onclick = () => startEdit(el, content, opts.turnIndex);
     actions.appendChild(editBtn);
@@ -1035,7 +1065,7 @@ function appendMessage(role, content, opts = {}) {
   if (role === 'gandalf') {
     const regenBtn = document.createElement('button');
     regenBtn.className = 'msg-action-btn';
-    regenBtn.textContent = '🔄';
+    regenBtn.textContent = '↺';
     regenBtn.title = 'Regenerate';
     regenBtn.onclick = () => regenerate(opts.turnIndex);
     actions.appendChild(regenBtn);
@@ -1345,6 +1375,9 @@ async function sendMessage() {
 
     removeThinking();
     appendMessage('gandalf', data.response, { turnIndex: conv.history.length - 1, isLast: true });
+
+    // Fire AI naming async — doesn't block, silently updates sidebar
+    aiAutoName(conv);
   } catch (err) {
     conv.history.pop();
     saveConvs();

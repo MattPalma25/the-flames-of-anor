@@ -1,0 +1,1249 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GandalfAI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IM+Fell+English:ital@0;1&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<style>
+  :root {
+    --bg:        #0d0c0b;
+    --surface:   #141210;
+    --border:    #2a2520;
+    --border-hi: #4a3f30;
+    --text:      #c8b99a;
+    --text-dim:  #6b5e4a;
+    --text-hi:   #e8d5b0;
+    --accent:    #c17f3a;
+    --accent-dim:#7a4f22;
+    --user-bg:   #1a1714;
+    --gandalf-bg:#111009;
+    --red:       #a04040;
+    --green:     #4a7a4a;
+    --scrollbar: #2a2520;
+    --sidebar-w: 280px;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+    pointer-events: none;
+    z-index: 999;
+    opacity: 0.4;
+  }
+
+  /* ── Sidebar ── */
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 50;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .sidebar-backdrop.visible {
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: var(--sidebar-w);
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    z-index: 51;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(calc(-1 * var(--sidebar-w)));
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .sidebar.open { transform: translateX(0); }
+
+  .sidebar-header {
+    padding: 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    flex-shrink: 0;
+  }
+
+  .sidebar-title {
+    font-family: 'IM Fell English', serif;
+    font-size: 14px;
+    color: var(--text-hi);
+    letter-spacing: 0.05em;
+  }
+
+  .sidebar-search {
+    position: relative;
+  }
+
+  .sidebar-search input {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-hi);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    padding: 7px 10px 7px 28px;
+    outline: none;
+    transition: border-color 0.2s;
+    letter-spacing: 0.05em;
+  }
+  .sidebar-search input:focus { border-color: var(--border-hi); }
+  .sidebar-search input::placeholder { color: var(--text-dim); }
+  .sidebar-search-icon {
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 11px;
+    pointer-events: none;
+  }
+
+  .sidebar-new-btn {
+    width: 100%;
+    background: transparent;
+    border: 1px solid var(--border-hi);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 7px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .sidebar-new-btn:hover {
+    background: rgba(193,127,58,0.06);
+    border-color: var(--accent);
+  }
+
+  .sidebar-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 0;
+  }
+  .sidebar-list::-webkit-scrollbar { width: 3px; }
+  .sidebar-list::-webkit-scrollbar-track { background: transparent; }
+  .sidebar-list::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+
+  .conv-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 12px;
+    cursor: pointer;
+    border-left: 2px solid transparent;
+    transition: all 0.15s;
+    group: true;
+  }
+  .conv-item:hover { background: rgba(255,255,255,0.03); }
+  .conv-item.active {
+    border-left-color: var(--accent);
+    background: rgba(193,127,58,0.06);
+  }
+
+  .conv-item-label {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-dim);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.15s;
+  }
+  .conv-item.active .conv-item-label { color: var(--text); }
+  .conv-item:hover .conv-item-label { color: var(--text); }
+
+  .conv-item-input {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--accent-dim);
+    color: var(--text-hi);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 11px;
+    outline: none;
+    padding: 0 2px;
+    min-width: 0;
+  }
+
+  .conv-item-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+    flex-shrink: 0;
+  }
+  .conv-item:hover .conv-item-actions { opacity: 1; }
+  .conv-item.active .conv-item-actions { opacity: 1; }
+
+  .conv-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 4px;
+    transition: color 0.15s;
+    line-height: 1;
+  }
+  .conv-action-btn:hover { color: var(--text-hi); }
+  .conv-action-btn.delete:hover { color: var(--red); }
+
+  .sidebar-empty {
+    padding: 20px 16px;
+    font-size: 10px;
+    color: var(--text-dim);
+    text-align: center;
+    font-style: italic;
+    font-family: 'IM Fell English', serif;
+  }
+
+  /* ── Header ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+
+  .hamburger-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 18px;
+    padding: 2px 6px 2px 0;
+    line-height: 1;
+    transition: color 0.2s;
+    letter-spacing: -1px;
+  }
+  .hamburger-btn:hover { color: var(--accent); }
+
+  .rune {
+    font-family: 'IM Fell English', serif;
+    font-size: 22px;
+    color: var(--accent);
+    line-height: 1;
+    filter: drop-shadow(0 0 6px var(--accent-dim));
+  }
+
+  .title {
+    font-family: 'IM Fell English', serif;
+    font-size: 16px;
+    color: var(--text-hi);
+    letter-spacing: 0.08em;
+  }
+
+  .subtitle {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 1px;
+  }
+
+  /* ── Pod Controls ── */
+  .pod-controls {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .status-dot {
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    transition: background 0.4s, box-shadow 0.4s;
+    flex-shrink: 0;
+  }
+  .status-dot.online  { background: var(--green);  box-shadow: 0 0 6px var(--green); }
+  .status-dot.starting{ background: var(--accent); box-shadow: 0 0 6px var(--accent-dim); animation: pulse 1.2s ease-in-out infinite; }
+  .status-dot.offline { background: var(--text-dim); }
+
+  @keyframes pulse {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.3; }
+  }
+
+  .status-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    min-width: 56px;
+  }
+
+  .btn {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 6px 14px;
+    border: 1px solid var(--border-hi);
+    background: transparent;
+    color: var(--text);
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn:hover:not(:disabled) {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(193,127,58,0.06);
+  }
+  .btn:disabled { opacity: 0.3; cursor: default; }
+  .btn-start { border-color: var(--accent-dim); color: var(--accent); }
+  .btn-stop  { border-color: #5a3030; color: var(--red); }
+  .btn-stop:hover:not(:disabled) {
+    border-color: var(--red);
+    color: var(--red);
+    background: rgba(160,64,64,0.06);
+  }
+
+  /* ── Messages ── */
+  .messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .messages::-webkit-scrollbar { width: 4px; }
+  .messages::-webkit-scrollbar-track { background: transparent; }
+  .messages::-webkit-scrollbar-thumb { background: var(--scrollbar); }
+
+  .message {
+    padding: 16px 24px;
+    border-bottom: 1px solid var(--border);
+    animation: fadeIn 0.2s ease;
+    line-height: 1.7;
+    position: relative;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user    { background: var(--user-bg); }
+  .message.gandalf { background: var(--gandalf-bg); }
+
+  .message-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 8px;
+  }
+
+  .message-header-left {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .speaker {
+    font-size: 10px;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+  }
+  .speaker.you     { color: var(--accent); }
+  .speaker.gandalf { color: var(--text-dim); font-style: italic; font-family: 'IM Fell English', serif; font-size: 12px; letter-spacing: 0.1em; }
+
+  .message-actions {
+    display: flex;
+    gap: 6px;
+    opacity: 0;
+    transition: opacity 0.15s;
+  }
+  .message:hover .message-actions { opacity: 1; }
+
+  .msg-action-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 11px;
+    padding: 2px 5px;
+    transition: color 0.15s;
+    font-family: 'JetBrains Mono', monospace;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-size: 9px;
+    border: 1px solid transparent;
+  }
+  .msg-action-btn:hover {
+    color: var(--text-hi);
+    border-color: var(--border);
+  }
+  .msg-action-btn.copied {
+    color: var(--green);
+    border-color: var(--green);
+  }
+
+  .message-body {
+    color: var(--text);
+    font-size: 13px;
+  }
+
+  .message-body p   { margin-bottom: 0.6em; }
+  .message-body p:last-child { margin-bottom: 0; }
+  .message-body code {
+    background: rgba(255,255,255,0.05);
+    padding: 1px 5px;
+    border-radius: 2px;
+    font-size: 12px;
+    color: var(--accent);
+  }
+  .message-body pre {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    padding: 12px;
+    margin: 8px 0;
+    overflow-x: auto;
+    border-radius: 2px;
+  }
+  .message-body pre code { background: none; padding: 0; color: var(--text); }
+  .message-body strong { color: var(--text-hi); font-weight: 400; }
+  .message-body em     { color: var(--text-dim); font-style: italic; }
+
+  /* Thinking indicator */
+  .thinking {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 16px 24px;
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    font-style: italic;
+    font-family: 'IM Fell English', serif;
+  }
+
+  .thinking-dots span {
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-dim);
+    margin: 0 1px;
+    animation: blink 1.4s ease-in-out infinite;
+  }
+  .thinking-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .thinking-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes blink {
+    0%,80%,100% { opacity: 0.2; }
+    40%          { opacity: 1; }
+  }
+
+  /* ── Input Area ── */
+  .input-area {
+    border-top: 1px solid var(--border);
+    background: var(--surface);
+    padding: 16px 20px;
+    flex-shrink: 0;
+  }
+
+  .input-row {
+    display: flex;
+    gap: 10px;
+    align-items: flex-end;
+  }
+
+  textarea {
+    flex: 1;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-hi);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    padding: 10px 14px;
+    resize: none;
+    min-height: 42px;
+    max-height: 160px;
+    line-height: 1.6;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  textarea:focus { border-color: var(--border-hi); }
+  textarea::placeholder { color: var(--text-dim); font-style: italic; }
+  textarea:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .send-btn {
+    background: transparent;
+    border: 1px solid var(--accent-dim);
+    color: var(--accent);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    padding: 10px 16px;
+    cursor: pointer;
+    transition: all 0.2s;
+    white-space: nowrap;
+    align-self: stretch;
+  }
+  .send-btn:hover:not(:disabled) {
+    background: rgba(193,127,58,0.1);
+    border-color: var(--accent);
+  }
+  .send-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* ── Empty State ── */
+  .empty {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    padding: 40px;
+    text-align: center;
+  }
+
+  .empty-rune {
+    font-family: 'IM Fell English', serif;
+    font-size: 48px;
+    color: var(--border-hi);
+    filter: drop-shadow(0 0 12px var(--accent-dim));
+    line-height: 1;
+  }
+
+  .empty-text {
+    color: var(--text-dim);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    max-width: 280px;
+    line-height: 1.8;
+  }
+
+  /* ── System messages ── */
+  .sys-msg {
+    padding: 8px 24px;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.1em;
+    text-align: center;
+    font-style: italic;
+    font-family: 'IM Fell English', serif;
+  }
+
+  /* ── Settings overlay ── */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 100;
+    backdrop-filter: blur(2px);
+  }
+  .overlay.hidden { display: none; }
+
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border-hi);
+    padding: 28px;
+    width: 480px;
+    max-width: calc(100vw - 40px);
+  }
+
+  .modal-title {
+    font-family: 'IM Fell English', serif;
+    font-size: 18px;
+    color: var(--text-hi);
+    margin-bottom: 20px;
+    letter-spacing: 0.05em;
+  }
+
+  .field { margin-bottom: 16px; }
+
+  label {
+    display: block;
+    font-size: 10px;
+    color: var(--text-dim);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  input[type="text"], input[type="password"] {
+    width: 100%;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text-hi);
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12px;
+    padding: 8px 12px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  input:focus { border-color: var(--border-hi); }
+
+  .field-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    margin-top: 4px;
+    font-style: italic;
+  }
+
+  .modal-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 24px;
+  }
+
+  .settings-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 16px;
+    padding: 4px;
+    transition: color 0.2s;
+    line-height: 1;
+  }
+  .settings-btn:hover { color: var(--text); }
+</style>
+</head>
+<body>
+
+<!-- Sidebar backdrop -->
+<div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+
+<!-- Sidebar -->
+<div class="sidebar" id="sidebar">
+  <div class="sidebar-header">
+    <div class="sidebar-title">Conversations</div>
+    <div class="sidebar-search">
+      <span class="sidebar-search-icon">⌕</span>
+      <input type="text" id="sidebar-search" placeholder="Search chats…">
+    </div>
+    <button class="sidebar-new-btn" id="btn-new-conv">+ New Conversation</button>
+  </div>
+  <div class="sidebar-list" id="sidebar-list"></div>
+</div>
+
+<!-- Settings overlay -->
+<div class="overlay hidden" id="overlay">
+  <div class="modal">
+    <div class="modal-title">Configuration</div>
+    <div class="field">
+      <label>RunPod API Key</label>
+      <input type="password" id="cfg-apikey" placeholder="rp_xxxxxxxxxxxxxxxx">
+    </div>
+    <div class="field">
+      <label>Pod ID</label>
+      <input type="text" id="cfg-podid-input" placeholder="lbw2v72u538p0w">
+      <div class="field-hint">Endpoint will be constructed automatically</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn" id="cfg-cancel">Cancel</button>
+      <button class="btn btn-start" id="cfg-save">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Header -->
+<header>
+  <div class="header-left">
+    <button class="hamburger-btn" id="btn-hamburger" title="Conversations">≡</button>
+    <div class="rune">𝔊</div>
+    <div>
+      <div class="title">GandalfAI</div>
+      <div class="subtitle">The Grey Wanderer</div>
+    </div>
+  </div>
+  <div class="pod-controls">
+    <div class="status-dot" id="status-dot"></div>
+    <div class="status-label" id="status-label">offline</div>
+    <button class="btn btn-start" id="btn-start">Start</button>
+    <button class="btn btn-stop" id="btn-stop" disabled>Stop</button>
+    <button class="settings-btn" id="btn-settings" title="Settings">⚙</button>
+  </div>
+</header>
+
+<!-- Messages -->
+<div class="messages" id="messages">
+  <div class="empty" id="empty-state">
+    <div class="empty-rune">✦</div>
+    <div class="empty-text">Start the pod, then speak.<br>The wanderer awaits.</div>
+  </div>
+</div>
+
+<!-- Input -->
+<div class="input-area">
+  <div class="input-row">
+    <textarea
+      id="input"
+      placeholder="Speak your mind..."
+      rows="1"
+      disabled
+    ></textarea>
+    <button class="send-btn" id="btn-send" disabled>Send</button>
+  </div>
+</div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const POD_GPU    = 'NVIDIA RTX PRO 6000 Blackwell Server Edition';
+const POD_DC     = 'EUR-IS-1';
+const POD_IMAGE  = 'runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04';
+const POD_NAME   = 'scattered_white_caterpillar';
+const NET_VOL_ID = '4bo4i1j8r5';
+const POLL_MS    = 5000;
+
+function podIdToEndpoint(id) {
+  return id ? `https://${id.trim()}-8000.proxy.runpod.net` : null;
+}
+
+// ── State ───────────────────────────────────────────────────────────────────
+let cfg      = loadCfg();
+let convs    = loadConvs();
+let activeId = convs.length ? convs[0].id : null;
+let polling  = null;
+
+// ── Storage helpers ──────────────────────────────────────────────────────────
+function loadCfg() {
+  try { return JSON.parse(localStorage.getItem('gai_cfg')) || {}; } catch { return {}; }
+}
+function saveCfg() { localStorage.setItem('gai_cfg', JSON.stringify(cfg)); }
+
+function loadConvs() {
+  try { return JSON.parse(localStorage.getItem('gai_convs')) || []; } catch { return []; }
+}
+function saveConvs() { localStorage.setItem('gai_convs', JSON.stringify(convs)); }
+
+function getActiveConv() { return convs.find(c => c.id === activeId); }
+
+// ── DOM refs ────────────────────────────────────────────────────────────────
+const $messages   = document.getElementById('messages');
+const $input      = document.getElementById('input');
+const $btnSend    = document.getElementById('btn-send');
+const $btnStart   = document.getElementById('btn-start');
+const $btnStop    = document.getElementById('btn-stop');
+const $statusDot  = document.getElementById('status-dot');
+const $statusLbl  = document.getElementById('status-label');
+const $emptyState = document.getElementById('empty-state');
+const $overlay    = document.getElementById('overlay');
+const $sidebar    = document.getElementById('sidebar');
+const $backdrop   = document.getElementById('sidebar-backdrop');
+const $sideList   = document.getElementById('sidebar-list');
+const $searchInput= document.getElementById('sidebar-search');
+
+// ── Sidebar ──────────────────────────────────────────────────────────────────
+function openSidebar() {
+  $sidebar.classList.add('open');
+  $backdrop.classList.add('visible');
+}
+function closeSidebar() {
+  $sidebar.classList.remove('open');
+  $backdrop.classList.remove('visible');
+}
+
+document.getElementById('btn-hamburger').onclick = openSidebar;
+$backdrop.onclick = closeSidebar;
+
+$searchInput.addEventListener('input', () => renderSidebar($searchInput.value));
+
+function renderSidebar(filter = '') {
+  $sideList.innerHTML = '';
+  const q = filter.toLowerCase();
+  const filtered = q
+    ? convs.filter(c =>
+        c.label.toLowerCase().includes(q) ||
+        c.history.some(t =>
+          (t.user || '').toLowerCase().includes(q) ||
+          (t.assistant || '').toLowerCase().includes(q)
+        )
+      )
+    : convs;
+
+  if (!filtered.length) {
+    const empty = document.createElement('div');
+    empty.className = 'sidebar-empty';
+    empty.textContent = q ? 'No matches found.' : 'No conversations yet.';
+    $sideList.appendChild(empty);
+    return;
+  }
+
+  filtered.forEach(c => {
+    const item = document.createElement('div');
+    item.className = 'conv-item' + (c.id === activeId ? ' active' : '');
+    item.dataset.id = c.id;
+
+    const label = document.createElement('span');
+    label.className = 'conv-item-label';
+    label.textContent = c.label;
+
+    const actions = document.createElement('div');
+    actions.className = 'conv-item-actions';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'conv-action-btn';
+    renameBtn.title = 'Rename';
+    renameBtn.textContent = '✎';
+    renameBtn.onclick = (e) => { e.stopPropagation(); startRename(c.id, item, label); };
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'conv-action-btn delete';
+    deleteBtn.title = 'Delete';
+    deleteBtn.textContent = '✕';
+    deleteBtn.onclick = (e) => { e.stopPropagation(); deleteConv(c.id); };
+
+    actions.appendChild(renameBtn);
+    actions.appendChild(deleteBtn);
+    item.appendChild(label);
+    item.appendChild(actions);
+
+    item.onclick = () => {
+      switchConv(c.id);
+      closeSidebar();
+    };
+
+    $sideList.appendChild(item);
+  });
+}
+
+function startRename(id, item, labelEl) {
+  const conv = convs.find(c => c.id === id);
+  if (!conv) return;
+
+  const input = document.createElement('input');
+  input.className = 'conv-item-input';
+  input.value = conv.label;
+  item.replaceChild(input, labelEl);
+  input.focus();
+  input.select();
+
+  function commit() {
+    const val = input.value.trim();
+    if (val) conv.label = val;
+    saveConvs();
+    renderSidebar($searchInput.value);
+  }
+  input.addEventListener('blur', commit);
+  input.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
+    if (e.key === 'Escape') { input.value = conv.label; input.blur(); }
+  });
+}
+
+function deleteConv(id) {
+  const idx = convs.findIndex(c => c.id === id);
+  if (idx === -1) return;
+  convs.splice(idx, 1);
+  saveConvs();
+  if (activeId === id) {
+    activeId = convs.length ? convs[0].id : null;
+    if (!convs.length) newConv();
+    else { renderMessages(); }
+  }
+  renderSidebar($searchInput.value);
+}
+
+// ── Settings ─────────────────────────────────────────────────────────────────
+document.getElementById('btn-settings').onclick = () => {
+  document.getElementById('cfg-apikey').value     = cfg.apiKey || '';
+  document.getElementById('cfg-podid-input').value = cfg.podId  || '';
+  $overlay.classList.remove('hidden');
+};
+document.getElementById('cfg-cancel').onclick = () => $overlay.classList.add('hidden');
+document.getElementById('cfg-save').onclick = () => {
+  cfg.apiKey  = document.getElementById('cfg-apikey').value.trim();
+  const rawPodId = document.getElementById('cfg-podid-input').value.trim();
+  if (rawPodId) {
+    cfg.podId    = rawPodId;
+    cfg.endpoint = podIdToEndpoint(rawPodId);
+  }
+  saveCfg();
+  $overlay.classList.add('hidden');
+  if (cfg.endpoint) checkHealth();
+};
+
+// ── Conversations ─────────────────────────────────────────────────────────────
+function newConv() {
+  const id = 'c' + Date.now();
+  const label = 'New conversation';
+  convs.unshift({ id, label, history: [] });
+  saveConvs();
+  switchConv(id);
+  renderSidebar($searchInput.value);
+}
+
+function switchConv(id) {
+  activeId = id;
+  renderSidebar($searchInput.value);
+  renderMessages();
+}
+
+// Auto-name from first user message
+function maybeAutoName(conv) {
+  if (conv.label !== 'New conversation') return;
+  if (!conv.history.length) return;
+  const first = conv.history[0].user || '';
+  const words = first.trim().split(/\s+/).slice(0, 6).join(' ');
+  if (words) conv.label = words.length > 40 ? words.slice(0, 40) + '…' : words;
+  saveConvs();
+  renderSidebar($searchInput.value);
+}
+
+document.getElementById('btn-new-conv').onclick = () => {
+  newConv();
+  closeSidebar();
+};
+
+// ── Messages rendering ────────────────────────────────────────────────────────
+function renderMessages() {
+  $messages.innerHTML = '';
+  const conv = getActiveConv();
+  if (!conv || conv.history.length === 0) {
+    $messages.appendChild($emptyState);
+    return;
+  }
+  conv.history.forEach((turn, idx) => {
+    appendMessage('user', turn.user, { turnIndex: idx });
+    if (turn.assistant) appendMessage('gandalf', turn.assistant, { turnIndex: idx, isLast: idx === conv.history.length - 1 });
+  });
+  scrollBottom();
+}
+
+function appendMessage(role, content, opts = {}) {
+  const el = document.createElement('div');
+  el.className = 'message ' + role;
+
+  const header = document.createElement('div');
+  header.className = 'message-header';
+
+  const left = document.createElement('div');
+  left.className = 'message-header-left';
+
+  const speaker = document.createElement('span');
+  speaker.className = 'speaker ' + (role === 'user' ? 'you' : 'gandalf');
+  speaker.textContent = role === 'user' ? 'You' : 'Gandalf';
+  left.appendChild(speaker);
+
+  const actions = document.createElement('div');
+  actions.className = 'message-actions';
+
+  // Copy button
+  const copyBtn = document.createElement('button');
+  copyBtn.className = 'msg-action-btn';
+  copyBtn.textContent = 'copy';
+  copyBtn.onclick = () => {
+    navigator.clipboard.writeText(content).then(() => {
+      copyBtn.textContent = 'copied';
+      copyBtn.classList.add('copied');
+      setTimeout(() => { copyBtn.textContent = 'copy'; copyBtn.classList.remove('copied'); }, 1500);
+    });
+  };
+  actions.appendChild(copyBtn);
+
+  // Regenerate button (gandalf only, last turn only)
+  if (role === 'gandalf' && opts.isLast) {
+    const regenBtn = document.createElement('button');
+    regenBtn.className = 'msg-action-btn';
+    regenBtn.textContent = 'regen';
+    regenBtn.onclick = () => regenerate(opts.turnIndex);
+    actions.appendChild(regenBtn);
+  }
+
+  header.appendChild(left);
+  header.appendChild(actions);
+
+  const body = document.createElement('div');
+  body.className = 'message-body';
+  body.innerHTML = marked.parse(content || '');
+
+  el.appendChild(header);
+  el.appendChild(body);
+  $messages.appendChild(el);
+  scrollBottom();
+  return el;
+}
+
+async function regenerate(turnIndex) {
+  const conv = getActiveConv();
+  if (!conv) return;
+
+  // Remove the assistant response from this turn
+  conv.history[turnIndex].assistant = null;
+  saveConvs();
+
+  // Re-render up to this point
+  renderMessages();
+  showThinking();
+  setInputEnabled(false);
+
+  try {
+    const res = await fetch(cfg.endpoint + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: conv.history[turnIndex].user,
+        history: conv.history.slice(0, turnIndex).map(t => ({ user: t.user, assistant: t.assistant }))
+      })
+    });
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+    conv.history[turnIndex].assistant = data.response;
+    saveConvs();
+    removeThinking();
+    renderMessages();
+  } catch (err) {
+    removeThinking();
+    sysMsg('Regeneration failed: ' + err.message);
+  }
+
+  setInputEnabled(true);
+}
+
+function showThinking() {
+  const el = document.createElement('div');
+  el.className = 'thinking';
+  el.id = 'thinking';
+  el.innerHTML = '<span style="font-family:\'IM Fell English\',serif;font-size:12px;color:var(--text-dim)">Gandalf ponders</span><div class="thinking-dots"><span></span><span></span><span></span></div>';
+  $messages.appendChild(el);
+  scrollBottom();
+}
+
+function removeThinking() { document.getElementById('thinking')?.remove(); }
+
+function scrollBottom() { $messages.scrollTop = $messages.scrollHeight; }
+
+function sysMsg(text) {
+  const el = document.createElement('div');
+  el.className = 'sys-msg';
+  el.textContent = text;
+  $messages.appendChild(el);
+  scrollBottom();
+}
+
+// ── Pod management ─────────────────────────────────────────────────────────────
+async function runpodGQL(query) {
+  const res = await fetch(`https://api.runpod.io/graphql?api_key=${cfg.apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apollo-require-preflight': 'true' },
+    body: JSON.stringify({ query })
+  });
+  return res.json();
+}
+
+async function startPod() {
+  if (!cfg.apiKey) { alert('Add your RunPod API key in settings first.'); return; }
+  setStatus('starting', 'starting…');
+  $btnStart.disabled = true;
+  $btnStop.disabled  = true;
+  if (!activeId) newConv();
+  sysMsg('Summoning the wanderer…');
+
+  try {
+    const mutation = `mutation { podFindAndDeployOnDemand(input: {
+      cloudType: SECURE, gpuCount: 1,
+      gpuTypeId: "${POD_GPU}",
+      dataCenterId: "${POD_DC}",
+      name: "${POD_NAME}",
+      imageName: "${POD_IMAGE}",
+      containerDiskInGb: 30,
+      ports: "8000/http,8888/http,22/tcp",
+      networkVolumeId: "${NET_VOL_ID}",
+      volumeMountPath: "/workspace"
+    }) { id name } }`;
+
+    const data = await runpodGQL(mutation);
+    if (data.errors) throw new Error(data.errors[0].message);
+
+    const podId = data.data.podFindAndDeployOnDemand.id;
+    cfg.podId    = podId;
+    cfg.endpoint = podIdToEndpoint(podId);
+    saveCfg();
+
+    sysMsg(`Pod ${podId} deployed. Waiting for server…`);
+    pollHealth();
+  } catch (err) {
+    sysMsg('Failed to start pod: ' + err.message);
+    setStatus('offline', 'offline');
+    $btnStart.disabled = false;
+  }
+}
+
+async function stopPod() {
+  if (!cfg.apiKey || !cfg.podId) return;
+  $btnStop.disabled = true;
+  sysMsg('Sending the wanderer to rest…');
+
+  try {
+    // podStop (not podTerminate) — preserves pod ID and network volume
+    await runpodGQL(`mutation { podStop(input: { podId: "${cfg.podId}" }) { id desiredStatus } }`);
+    cfg.endpoint = null;
+    saveCfg();
+    stopPolling();
+    setStatus('offline', 'offline');
+    setInputEnabled(false);
+    sysMsg('Pod stopped. Pod ID preserved for next start.');
+    $btnStart.disabled = false;
+  } catch (err) {
+    sysMsg('Stop failed: ' + err.message);
+    $btnStop.disabled = false;
+  }
+}
+
+function pollHealth() {
+  stopPolling();
+  polling = setInterval(checkHealth, POLL_MS);
+  checkHealth();
+}
+function stopPolling() { if (polling) { clearInterval(polling); polling = null; } }
+
+async function checkHealth() {
+  if (!cfg.endpoint) return;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 4000);
+    const res = await fetch(cfg.endpoint + '/health', { signal: controller.signal });
+    clearTimeout(timeout);
+    if (res.ok) {
+      stopPolling();
+      setStatus('online', 'online');
+      setInputEnabled(true);
+      $btnStop.disabled  = false;
+      $btnStart.disabled = true;
+      sysMsg('Gandalf is ready.');
+    }
+  } catch { /* still starting */ }
+}
+
+function setStatus(cls, label) {
+  $statusDot.className = 'status-dot ' + cls;
+  $statusLbl.textContent = label;
+}
+
+function setInputEnabled(on) {
+  $input.disabled   = !on;
+  $btnSend.disabled = !on;
+  if (on) $input.focus();
+}
+
+// ── Sending messages ──────────────────────────────────────────────────────────
+async function sendMessage() {
+  const text = $input.value.trim();
+  if (!text || !cfg.endpoint) return;
+
+  const conv = getActiveConv();
+  if (!conv) return;
+
+  $input.value = '';
+  resizeInput();
+  setInputEnabled(false);
+
+  conv.history.push({ user: text, assistant: null });
+  saveConvs();
+  maybeAutoName(conv);
+
+  $emptyState.remove();
+  appendMessage('user', text);
+  showThinking();
+
+  try {
+    const res = await fetch(cfg.endpoint + '/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: text,
+        history: conv.history.slice(0, -1).map(t => ({ user: t.user, assistant: t.assistant }))
+      })
+    });
+
+    if (!res.ok) throw new Error('Server error ' + res.status);
+    const data = await res.json();
+
+    conv.history[conv.history.length - 1].assistant = data.response;
+    saveConvs();
+
+    removeThinking();
+    appendMessage('gandalf', data.response, { turnIndex: conv.history.length - 1, isLast: true });
+  } catch (err) {
+    conv.history.pop();
+    saveConvs();
+    removeThinking();
+    sysMsg('Error: ' + err.message);
+  }
+
+  setInputEnabled(true);
+}
+
+// ── Input auto-resize + keyboard ─────────────────────────────────────────────
+function resizeInput() {
+  $input.style.height = 'auto';
+  $input.style.height = Math.min($input.scrollHeight, 160) + 'px';
+}
+
+$input.addEventListener('input', resizeInput);
+$input.addEventListener('keydown', e => {
+  if (e.key === 'Enter') {
+    const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+    if (!isMobile && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+    // Mobile: Enter = newline (default behavior, do nothing)
+  }
+});
+
+$btnSend.onclick  = sendMessage;
+$btnStart.onclick = startPod;
+$btnStop.onclick  = stopPod;
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+(function init() {
+  if (!convs.length) newConv();
+  else { renderSidebar(); renderMessages(); }
+
+  if (cfg.endpoint) {
+    setStatus('starting', 'checking…');
+    checkHealth();
+  }
+})();
+</script>
+</body>
+</html>
